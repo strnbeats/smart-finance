@@ -1,12 +1,23 @@
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
 
+from fastapi import FastAPI, HTTPException
+from sqlalchemy import select
+
+from backend.database import SessionLocal, init_db
+from backend.models import Transaction
 from backend.schemas import TransactionCreate
 
 
-app = FastAPI(title="Smart Finance API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
 
-transactions: list[dict] = []
-next_transaction_id = 1
+
+app = FastAPI(
+    title="Smart Finance API",
+    lifespan=lifespan,
+)
 
 
 @app.get("/")
@@ -24,31 +35,54 @@ def health_check():
 
 @app.post("/transactions", status_code=201)
 def create_transaction(transaction: TransactionCreate):
-    global next_transaction_id
+    with SessionLocal() as session:
+        new_transaction = Transaction(**transaction.model_dump())
+        session.add(new_transaction)
+        session.commit()
+        session.refresh(new_transaction)
 
-    new_transaction = {
-        "id": next_transaction_id,
-        **transaction.model_dump(mode="json"),
-    }
-
-    transactions.append(new_transaction)
-    next_transaction_id += 1
-
-    return new_transaction
+        return {
+            "id": new_transaction.id,
+            **transaction.model_dump(mode="json"),
+        }
 
 
 @app.get("/transactions")
 def get_transactions():
-    return transactions
+    with SessionLocal() as session:
+        transactions = session.scalars(
+            select(Transaction).order_by(Transaction.id)
+        ).all()
+
+        return [
+            {
+                "id": transaction.id,
+                "date": transaction.date.isoformat(),
+                "amount": transaction.amount,
+                "type": transaction.type.value,
+                "category": transaction.category,
+                "description": transaction.description,
+            }
+            for transaction in transactions
+        ]
 
 
 @app.get("/transactions/{transaction_id}")
 def get_transaction(transaction_id: int):
-    for transaction in transactions:
-        if transaction["id"] == transaction_id:
-            return transaction
+    with SessionLocal() as session:
+        transaction = session.get(Transaction, transaction_id)
 
-    raise HTTPException(
-        status_code=404,
-        detail="Транзакция не найдена",
-    )
+        if transaction is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Транзакция не найдена",
+            )
+
+        return {
+            "id": transaction.id,
+            "date": transaction.date.isoformat(),
+            "amount": transaction.amount,
+            "type": transaction.type.value,
+            "category": transaction.category,
+            "description": transaction.description,
+        }
