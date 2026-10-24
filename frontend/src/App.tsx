@@ -1,29 +1,24 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getTransactions, type Transaction } from './api'
 import './App.css'
 
-type Transaction = {
-  id: number
-  title: string
-  category: string
-  date: string
-  amount: number
-  type: 'income' | 'expense'
-}
-
-const initialTransactions: Transaction[] = [
-  { id: 1, title: 'Зарплата', category: 'Доходы', date: '24 окт.', amount: 85000, type: 'income' },
-  { id: 2, title: 'Яндекс Go', category: 'Транспорт', date: '24 окт.', amount: 300, type: 'expense' },
-  { id: 3, title: 'Пятёрочка', category: 'Продукты', date: '23 окт.', amount: 1240, type: 'expense' },
-  { id: 4, title: 'Подписка Spotify', category: 'Подписки', date: '22 окт.', amount: 299, type: 'expense' },
-  { id: 5, title: 'Перевод', category: 'Доходы', date: '21 окт.', amount: 2500, type: 'income' },
-]
-
-const formatMoney = (amount: number) =>
+const formatMoney = (amountInKopecks: number) =>
   new Intl.NumberFormat('ru-RU', {
     style: 'currency',
     currency: 'RUB',
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(amountInKopecks / 100)
+
+const formatDate = (date: string) => {
+  const [year, month, day] = date.split('-').map(Number)
+
+  if (!year || !month || !day) return date
+
+  return new Date(year, month - 1, day).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+  })
+}
 
 const navigation = [
   { label: 'Обзор', icon: '◫' },
@@ -34,7 +29,44 @@ const navigation = [
 
 function App() {
   const [activePage, setActivePage] = useState('Обзор')
-  const [transactions] = useState(initialTransactions)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadTransactions() {
+      try {
+        setIsLoading(true)
+        setError('')
+
+        const data = await getTransactions()
+
+        if (isActive) {
+          setTransactions(data)
+        }
+      } catch (err) {
+        if (isActive) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Не удалось загрузить транзакции',
+          )
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadTransactions()
+
+    return () => {
+      isActive = false
+    }
+  }, [])
 
   const income = transactions
     .filter((transaction) => transaction.type === 'income')
@@ -45,6 +77,10 @@ function App() {
     .reduce((sum, transaction) => sum + transaction.amount, 0)
 
   const balance = income - expenses
+
+  const recentTransactions = [...transactions]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5)
 
   return (
     <div className="app-shell">
@@ -106,8 +142,30 @@ function App() {
                 <h2>Финансовая сводка</h2>
                 <p>Вот как обстоят дела с твоими деньгами.</p>
               </div>
-              <span className="period-label">Демо-данные · Октябрь 2026</span>
+              <span className="period-label">Данные из базы SQLite</span>
             </section>
+
+            {error && (
+              <div
+                role="alert"
+                style={{
+                  padding: '16px',
+                  marginBottom: '20px',
+                  borderRadius: '12px',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  color: '#fca5a5',
+                }}
+              >
+                <strong>Не удалось загрузить данные.</strong>
+                <p>{error}</p>
+                <button
+                  className="primary-button"
+                  onClick={() => window.location.reload()}
+                >
+                  Попробовать снова
+                </button>
+              </div>
+            )}
 
             <section className="summary-grid">
               <article className="summary-card balance-card">
@@ -115,7 +173,9 @@ function App() {
                   <span>Общий баланс</span>
                   <span className="card-icon">₽</span>
                 </div>
-                <div className="balance-amount">{formatMoney(balance)}</div>
+                <div className="balance-amount">
+                  {isLoading ? 'Загрузка...' : formatMoney(balance)}
+                </div>
                 <div className="card-footnote">
                   <span className="trend-positive">↗</span> Доходы минус расходы
                 </div>
@@ -127,8 +187,10 @@ function App() {
                   <span>Доходы</span>
                   <span className="card-icon income-icon">↙</span>
                 </div>
-                <div className="summary-amount">{formatMoney(income)}</div>
-                <div className="card-footnote">За отображаемый период</div>
+                <div className="summary-amount">
+                  {isLoading ? 'Загрузка...' : formatMoney(income)}
+                </div>
+                <div className="card-footnote">По загруженным транзакциям</div>
               </article>
 
               <article className="summary-card">
@@ -136,8 +198,10 @@ function App() {
                   <span>Расходы</span>
                   <span className="card-icon expense-icon">↗</span>
                 </div>
-                <div className="summary-amount">{formatMoney(expenses)}</div>
-                <div className="card-footnote">За отображаемый период</div>
+                <div className="summary-amount">
+                  {isLoading ? 'Загрузка...' : formatMoney(expenses)}
+                </div>
+                <div className="card-footnote">По загруженным транзакциям</div>
               </article>
             </section>
 
@@ -146,7 +210,7 @@ function App() {
                 <div className="panel-heading">
                   <div>
                     <h3>Последние операции</h3>
-                    <p>Твои недавние движения средств</p>
+                    <p>Транзакции из твоей базы данных</p>
                   </div>
                   <button
                     className="text-button"
@@ -157,39 +221,53 @@ function App() {
                 </div>
 
                 <div className="transaction-list">
-                  {transactions.map((transaction) => (
-                    <div className="transaction-row" key={transaction.id}>
-                      <div
-                        className={`transaction-icon ${
-                          transaction.type === 'income' ? 'transaction-income' : ''
-                        }`}
-                      >
-                        {transaction.type === 'income' ? '↙' : '↗'}
-                      </div>
-                      <div className="transaction-info">
-                        <div className="transaction-title">{transaction.title}</div>
-                        <div className="transaction-meta">
-                          {transaction.category} · {transaction.date}
+                  {isLoading ? (
+                    <p>Загружаем транзакции...</p>
+                  ) : error ? (
+                    <p>Список временно недоступен.</p>
+                  ) : recentTransactions.length === 0 ? (
+                    <p>Пока нет транзакций. Добавь первую через API.</p>
+                  ) : (
+                    recentTransactions.map((transaction) => (
+                      <div className="transaction-row" key={transaction.id}>
+                        <div
+                          className={`transaction-icon ${
+                            transaction.type === 'income'
+                              ? 'transaction-income'
+                              : ''
+                          }`}
+                        >
+                          {transaction.type === 'income' ? '↙' : '↗'}
+                        </div>
+
+                        <div className="transaction-info">
+                          <div className="transaction-title">
+                            {transaction.description || transaction.category}
+                          </div>
+                          <div className="transaction-meta">
+                            {transaction.category} · {formatDate(transaction.date)}
+                          </div>
+                        </div>
+
+                        <div
+                          className={`transaction-amount ${
+                            transaction.type === 'income' ? 'amount-income' : ''
+                          }`}
+                        >
+                          {transaction.type === 'income' ? '+' : '−'}
+                          {formatMoney(transaction.amount)}
                         </div>
                       </div>
-                      <div
-                        className={`transaction-amount ${
-                          transaction.type === 'income' ? 'amount-income' : ''
-                        }`}
-                      >
-                        {transaction.type === 'income' ? '+' : '−'}
-                        {formatMoney(transaction.amount)}
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </article>
 
               <article className="panel spending-panel">
                 <div className="panel-heading">
                   <div>
-                    <h3>Расходы и доходы</h3>
-                    <p>Сравнение по демо-данным</p>
+                    <h3>Финансовая сводка</h3>
+                    <p>Доходы и расходы из базы</p>
                   </div>
                 </div>
 
@@ -197,40 +275,54 @@ function App() {
                   <div className="chart-gridline line-one" />
                   <div className="chart-gridline line-two" />
                   <div className="chart-gridline line-three" />
+
                   <div className="bar-group">
-                    <div className="bar income-bar" style={{ height: '85%' }} />
-                    <div className="bar expense-bar" style={{ height: '24%' }} />
-                    <span>Доходы</span>
-                  </div>
-                  <div className="bar-group">
-                    <div className="bar income-bar" style={{ height: '42%' }} />
-                    <div className="bar expense-bar" style={{ height: '18%' }} />
-                    <span>Расходы</span>
-                  </div>
-                  <div className="bar-group">
-                    <div className="bar income-bar" style={{ height: '60%' }} />
-                    <div className="bar expense-bar" style={{ height: '35%' }} />
-                    <span>Баланс</span>
+                    <div
+                      className="bar income-bar"
+                      style={{
+                        height: `${Math.max(
+                          4,
+                          (income / Math.max(income, expenses, 1)) * 85,
+                        )}%`,
+                      }}
+                    />
+                    <div
+                      className="bar expense-bar"
+                      style={{
+                        height: `${Math.max(
+                          4,
+                          (expenses / Math.max(income, expenses, 1)) * 85,
+                        )}%`,
+                      }}
+                    />
+                    <span>Сейчас</span>
                   </div>
                 </div>
 
                 <div className="chart-legend">
-                  <span><i className="legend-dot income-dot" /> Доходы</span>
-                  <span><i className="legend-dot expense-dot" /> Расходы</span>
+                  <span>
+                    <i className="legend-dot income-dot" /> Доходы
+                  </span>
+                  <span>
+                    <i className="legend-dot expense-dot" /> Расходы
+                  </span>
                 </div>
 
                 <div className="insight-box">
                   <span className="insight-icon">✦</span>
                   <div>
                     <div className="insight-title">Финансовая подсказка</div>
-                    <p>После подключения реальных данных здесь появится анализ твоих расходов.</p>
+                    <p>
+                      Следующим шагом добавим анализ расходов по категориям и
+                      AI-помощника.
+                    </p>
                   </div>
                 </div>
               </article>
             </section>
 
             <footer className="page-footer">
-              Smart Finance <span>·</span> Первый прототип интерфейса
+              Smart Finance <span>·</span> Данные загружаются из FastAPI
             </footer>
           </>
         ) : (
@@ -243,16 +335,6 @@ function App() {
               Этот раздел пока в разработке. Следующим шагом подключим его к
               FastAPI и базе данных.
             </p>
-            {activePage === 'Импорт документов' && (
-              <button
-                className="primary-button"
-                onClick={() =>
-                  setActivePage('Импорт документов')
-                }
-              >
-                Подготовить импорт PDF
-              </button>
-            )}
           </section>
         )}
       </main>
