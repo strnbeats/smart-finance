@@ -7,7 +7,11 @@ from sqlalchemy import select
 from backend.analytics import get_financial_summary
 from backend.database import SessionLocal, init_db
 from backend.models import Transaction
-from backend.schemas import TransactionCreate, TransactionUpdate
+from backend.schemas import (
+    TransactionCreate,
+    TransactionType,
+    TransactionUpdate,
+)
 
 
 @asynccontextmanager
@@ -58,16 +62,46 @@ def create_transaction(transaction: TransactionCreate):
 
 
 @app.get("/transactions")
-def get_transactions():
+def get_transactions(
+    start_date: date | None = None,
+    end_date: date | None = None,
+    category: str | None = None,
+    type: TransactionType | None = None,
+):
+    if (
+        start_date is not None
+        and end_date is not None
+        and start_date > end_date
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Начальная дата не может быть позже конечной",
+        )
+
     with SessionLocal() as session:
+        query = select(Transaction)
+
+        if start_date is not None:
+            query = query.where(Transaction.date >= start_date)
+
+        if end_date is not None:
+            query = query.where(Transaction.date <= end_date)
+
+        if category is not None:
+            query = query.where(Transaction.category == category)
+
+        if type is not None:
+            query = query.where(Transaction.type == type)
+
         transactions = session.scalars(
-            select(Transaction).order_by(Transaction.id)
+            query.order_by(Transaction.date.desc(), Transaction.id.desc())
         ).all()
 
         return [
             transaction_to_dict(transaction)
             for transaction in transactions
         ]
+
 
 
 @app.get("/transactions/{transaction_id}")
