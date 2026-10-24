@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from backend.database import SessionLocal, init_db
 from backend.models import Transaction
-from backend.schemas import TransactionCreate
+from backend.schemas import TransactionCreate, TransactionUpdate
 
 
 @asynccontextmanager
@@ -18,6 +18,17 @@ app = FastAPI(
     title="Smart Finance API",
     lifespan=lifespan,
 )
+
+
+def transaction_to_dict(transaction: Transaction):
+    return {
+        "id": transaction.id,
+        "date": transaction.date.isoformat(),
+        "amount": transaction.amount,
+        "type": transaction.type.value,
+        "category": transaction.category,
+        "description": transaction.description,
+    }
 
 
 @app.get("/")
@@ -41,10 +52,7 @@ def create_transaction(transaction: TransactionCreate):
         session.commit()
         session.refresh(new_transaction)
 
-        return {
-            "id": new_transaction.id,
-            **transaction.model_dump(mode="json"),
-        }
+        return transaction_to_dict(new_transaction)
 
 
 @app.get("/transactions")
@@ -55,14 +63,7 @@ def get_transactions():
         ).all()
 
         return [
-            {
-                "id": transaction.id,
-                "date": transaction.date.isoformat(),
-                "amount": transaction.amount,
-                "type": transaction.type.value,
-                "category": transaction.category,
-                "description": transaction.description,
-            }
+            transaction_to_dict(transaction)
             for transaction in transactions
         ]
 
@@ -78,11 +79,47 @@ def get_transaction(transaction_id: int):
                 detail="Транзакция не найдена",
             )
 
+        return transaction_to_dict(transaction)
+
+
+@app.put("/transactions/{transaction_id}")
+def update_transaction(
+    transaction_id: int,
+    updated_data: TransactionUpdate,
+):
+    with SessionLocal() as session:
+        transaction = session.get(Transaction, transaction_id)
+
+        if transaction is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Транзакция не найдена",
+            )
+
+        for field, value in updated_data.model_dump().items():
+            setattr(transaction, field, value)
+
+        session.commit()
+        session.refresh(transaction)
+
+        return transaction_to_dict(transaction)
+
+
+@app.delete("/transactions/{transaction_id}")
+def delete_transaction(transaction_id: int):
+    with SessionLocal() as session:
+        transaction = session.get(Transaction, transaction_id)
+
+        if transaction is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Транзакция не найдена",
+            )
+
+        session.delete(transaction)
+        session.commit()
+
         return {
-            "id": transaction.id,
-            "date": transaction.date.isoformat(),
-            "amount": transaction.amount,
-            "type": transaction.type.value,
-            "category": transaction.category,
-            "description": transaction.description,
+            "message": "Транзакция удалена",
+            "id": transaction_id,
         }

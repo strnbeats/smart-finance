@@ -15,3 +15,11 @@ class TransactionCreate(BaseModel):
     type: TransactionType
     category: str = Field(min_length=1, max_length=50)
     description: str = Field(default="", max_length=500)
+
+
+class TransactionUpdate(BaseModel):
+    date: date
+    amount: int = Field(gt=0, description="Сумма в копейках")
+    type: TransactionType
+    category: str = Field(min_length=1, max_length=50)
+    description: str = Field(default="", max_length=500)
