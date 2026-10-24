@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+from datetime import date
 
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import select
 
+from backend.analytics import get_financial_summary
 from backend.database import SessionLocal, init_db
 from backend.models import Transaction
 from backend.schemas import TransactionCreate, TransactionUpdate
@@ -123,3 +125,22 @@ def delete_transaction(transaction_id: int):
             "message": "Транзакция удалена",
             "id": transaction_id,
         }
+
+
+@app.get("/analytics/summary")
+def analytics_summary(
+    start_date: date,
+    end_date: date,
+):
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Начальная дата не может быть позже конечной",
+        )
+
+    with SessionLocal() as session:
+        return get_financial_summary(
+            session=session,
+            start_date=start_date,
+            end_date=end_date,
+        )
