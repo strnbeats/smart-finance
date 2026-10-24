@@ -92,7 +92,8 @@ def parse_sber_operation_text(text: str) -> dict:
         raise ValueError("Сумма операции должна быть положительной")
 
     status_match = re.search(
-        r"Статус операции\s*(.*?)\s*Тип операции",
+        r"Статус операции\s*(.*?)"
+        r"(?=\s*Тип операции|\s*Описание|\s*Операция совершена|\Z)",
         text,
         re.DOTALL | re.IGNORECASE,
     )
@@ -102,8 +103,21 @@ def parse_sber_operation_text(text: str) -> dict:
 
     status = " ".join(status_match.group(1).split()).lower()
 
-    if status != "платёж выполнен":
-        raise ValueError("Операция ещё не подтверждена")
+    if status not in ("платёж выполнен", "платеж выполнен"):
+        raise ValueError(
+            "Операция ещё не подтверждена или её статус не распознан"
+        )
+
+
+    if not status_match:
+        raise ValueError("Не удалось определить статус операции")
+
+    status = " ".join(status_match.group(1).split()).lower()
+
+    if status not in ("платёж выполнен", "платеж выполнен"):
+        raise ValueError(
+            f"Неизвестный или неподтверждённый статус операции: {status!r}"
+    )
 
     return {
         "date": operation_date,

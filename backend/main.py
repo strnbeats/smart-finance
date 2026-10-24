@@ -1,17 +1,23 @@
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from sqlalchemy import select
 
 from backend.analytics import get_financial_summary
 from backend.database import SessionLocal, init_db
+from backend.importers.sber_import import parse_sber_pdf
 from backend.models import Transaction
 from backend.schemas import (
     TransactionCreate,
     TransactionType,
     TransactionUpdate,
 )
+
+
+MAX_PDF_SIZE = 10 * 1024 * 1024
 
 
 @asynccontextmanager
@@ -94,14 +100,16 @@ def get_transactions(
             query = query.where(Transaction.type == type)
 
         transactions = session.scalars(
-            query.order_by(Transaction.date.desc(), Transaction.id.desc())
+            query.order_by(
+                Transaction.date.desc(),
+                Transaction.id.desc(),
+            )
         ).all()
 
         return [
             transaction_to_dict(transaction)
             for transaction in transactions
         ]
-
 
 
 @app.get("/transactions/{transaction_id}")
@@ -178,3 +186,54 @@ def analytics_summary(
             start_date=start_date,
             end_date=end_date,
         )
+
+
+@app.post("/imports/sber/pdf")
+async def preview_sber_pdf(file: UploadFile = File(...)):
+    if not file.filename or Path(file.filename).suffix.lower() != ".pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="Загрузи файл с расширением .pdf",
+        )
+
+    try:
+        content = await file.read(MAX_PDF_SIZE + 1)
+
+        if len(content) > MAX_PDF_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="Размер PDF не должен превышать 10 МБ",
+            )
+
+        with TemporaryDirectory() as temp_dir:
+            pdf_path = Path(temp_dir) / "uploaded.pdf"
+            pdf_path.write_bytes(content)
+
+            transaction = parse_sber_pdf(pdf_path)
+
+        return {
+            "saved": False,
+            "message": (
+                "Операция распознана. "
+                "Проверь данные перед сохранением."
+            ),
+            "transaction": {
+                "date": transaction["date"].isoformat(),
+                "amount": transaction["amount"],
+                "type": transaction["type"].value,
+                "category": transaction["category"],
+                "description": transaction["description"],
+            },
+        }
+
+    except HTTPException:
+        raise
+
+    except (ValueError, OSError) as error:
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    finally:
+        await file.close()
