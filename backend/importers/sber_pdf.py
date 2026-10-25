@@ -2,6 +2,7 @@ import re
 from datetime import date
 from decimal import Decimal
 
+from backend.importers.mcc_codes import category_from_mcc
 from backend.schemas import TransactionType
 
 
@@ -21,13 +22,26 @@ MONTHS = {
 }
 
 
-def suggest_category(description: str) -> str:
-    text = description.lower()
 
-    if any(word in text for word in ("яндекс go", "такси", "uber")):
+def suggest_category(
+    description: str,
+    mcc: str | int | None = None,
+) -> str:
+    mcc_category = category_from_mcc(mcc)
+
+    if mcc_category is not None:
+        return mcc_category
+
+    text = description.lower().replace("ё", "е")
+
+    if any(
+        word in text
+        for word in ("яндекс go", "яндекс", "такси", "uber", "yandex")
+    ):
         return "Транспорт"
 
     return "Без категории"
+
 
 
 def parse_sber_operation_text(text: str) -> dict:
@@ -67,7 +81,6 @@ def parse_sber_operation_text(text: str) -> dict:
 
     description = " ".join(description_match.group(1).split())
 
-
     amount_match = re.search(
         r"Сумма в валюте сч[её]та\s*"
         r"([\d\s]+(?:[,.]\d{1,2})?)"
@@ -75,10 +88,6 @@ def parse_sber_operation_text(text: str) -> dict:
         text,
         re.IGNORECASE,
     )
-
-    if not amount_match:
-        raise ValueError("Не удалось найти сумму операции")
-
 
     if not amount_match:
         raise ValueError("Не удалось найти сумму операции")
@@ -108,21 +117,13 @@ def parse_sber_operation_text(text: str) -> dict:
             "Операция ещё не подтверждена или её статус не распознан"
         )
 
-
-    if not status_match:
-        raise ValueError("Не удалось определить статус операции")
-
-    status = " ".join(status_match.group(1).split()).lower()
-
-    if status not in ("платёж выполнен", "платеж выполнен"):
-        raise ValueError(
-            f"Неизвестный или неподтверждённый статус операции: {status!r}"
-    )
+    mcc = None
 
     return {
         "date": operation_date,
         "amount": amount_in_kopecks,
         "type": TransactionType.EXPENSE,
-        "category": suggest_category(description),
+        "category": suggest_category(description, mcc),
         "description": description,
+        "mcc": mcc,
     }

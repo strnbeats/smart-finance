@@ -1,3 +1,6 @@
+
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -5,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 import backend.database as database
 import backend.main as main
+from backend.schemas import TransactionType
 
 
 @pytest.fixture
@@ -173,3 +177,36 @@ def test_reject_invalid_mcc(client):
     )
 
     assert response.status_code == 422
+
+
+def test_sber_pdf_preview_includes_mcc(client, monkeypatch):
+    def fake_parse_sber_pdf(pdf_path):
+        return {
+            "date": date(2026, 10, 24),
+            "amount": 3000,
+            "type": TransactionType.EXPENSE,
+            "category": "Транспорт",
+            "description": "Яндекс Go",
+            "mcc": None,
+        }
+
+    monkeypatch.setattr(main, "parse_sber_pdf", fake_parse_sber_pdf)
+
+    response = client.post(
+        "/imports/sber/pdf",
+        files={
+            "file": (
+                "statement.pdf",
+                b"%PDF-test",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["saved"] is False
+    assert data["transaction"]["mcc"] is None
+    assert data["transaction"]["category"] == "Транспорт"

@@ -5,7 +5,10 @@ import pymupdf
 import pytest
 
 from backend.importers.sber_import import parse_sber_pdf
-from backend.importers.sber_pdf import parse_sber_operation_text
+from backend.importers.sber_pdf import (
+    parse_sber_operation_text,
+    suggest_category,
+)
 from backend.schemas import TransactionType
 
 
@@ -64,6 +67,14 @@ def test_reject_unconfirmed_operation():
 
     with pytest.raises(ValueError, match="не подтверждена"):
         parse_sber_operation_text(text)
+
+
+def test_suggest_category_uses_mcc():
+    assert suggest_category("Неизвестный магазин", "5411") == "Еда"
+
+
+def test_suggest_category_falls_back_to_description():
+    assert suggest_category("YANDEX GO", None) == "Транспорт"
 
 
 def test_parse_sber_pdf_end_to_end(tmp_path):

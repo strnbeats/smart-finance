@@ -56,7 +56,6 @@ def transaction_to_dict(transaction: Transaction):
     }
 
 
-
 @app.get("/")
 def read_root():
     return {
@@ -237,6 +236,7 @@ async def preview_sber_pdf(file: UploadFile = File(...)):
                 "type": transaction["type"].value,
                 "category": transaction["category"],
                 "description": transaction["description"],
+                "mcc": transaction.get("mcc"),
             },
         }
 
