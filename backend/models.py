@@ -1,6 +1,6 @@
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Date, Enum, Integer, String
+from sqlalchemy import Date, DateTime, Enum, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database import Base
@@ -46,4 +46,32 @@ class Transaction(Base):
         String(4),
         nullable=True,
         default=None,
+    )
+
+
+class CategoryRule(Base):
+    __tablename__ = "category_rules"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    merchant_key: Mapped[str] = mapped_column(
+        String(200),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    category: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=func.now(),
     )

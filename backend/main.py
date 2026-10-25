@@ -1,3 +1,4 @@
+import re
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -10,7 +11,7 @@ from sqlalchemy import select
 from backend.analytics import get_financial_summary
 from backend.database import SessionLocal, init_db
 from backend.importers.sber_import import parse_sber_pdf
-from backend.models import Transaction
+from backend.models import CategoryRule, Transaction
 from backend.schemas import (
     TransactionCreate,
     TransactionType,
@@ -19,6 +20,18 @@ from backend.schemas import (
 
 
 MAX_PDF_SIZE = 10 * 1024 * 1024
+
+GENERIC_DESCRIPTIONS = {
+    "покупка",
+    "покупка продуктов",
+    "оплата",
+    "оплата товаров и услуг",
+    "перевод",
+    "пополнение",
+    "снятие наличных",
+    "без категории",
+    "неизвестный магазин",
+}
 
 
 @asynccontextmanager
@@ -56,6 +69,36 @@ def transaction_to_dict(transaction: Transaction):
     }
 
 
+def extract_merchant_key(description: str) -> str | None:
+    text = " ".join(description.split()).strip()
+
+    if not text:
+        return None
+
+    # Например:
+    # "Яндекс Go (YANDEX*4121*GO MOSCOW RUS)"
+    # превратится в "яндекс go".
+    merchant = text.split("(", maxsplit=1)[0].strip()
+    merchant = merchant.strip(" -–—:,.").lower().replace("ё", "е")
+    merchant = re.sub(r"\s+", " ", merchant)
+
+    if merchant in GENERIC_DESCRIPTIONS:
+        return None
+
+    if len(merchant) < 3:
+        return None
+
+    return merchant[:200]
+
+
+def find_category_rule(session, merchant_key: str) -> CategoryRule | None:
+    return session.scalar(
+        select(CategoryRule).where(
+            CategoryRule.merchant_key == merchant_key
+        )
+    )
+
+
 @app.get("/")
 def read_root():
     return {
@@ -71,13 +114,42 @@ def health_check():
 
 @app.post("/transactions", status_code=201)
 def create_transaction(transaction: TransactionCreate):
+    data = transaction.model_dump()
+    learn_category_rule = data.pop("learn_category_rule", False)
+
     with SessionLocal() as session:
-        new_transaction = Transaction(**transaction.model_dump())
+        new_transaction = Transaction(**data)
         session.add(new_transaction)
+
+        category_rule_saved = False
+
+        if learn_category_rule:
+            merchant_key = extract_merchant_key(
+                new_transaction.description
+            )
+
+            if merchant_key is not None:
+                rule = find_category_rule(session, merchant_key)
+
+                if rule is None:
+                    rule = CategoryRule(
+                        merchant_key=merchant_key,
+                        category=new_transaction.category,
+                    )
+                    session.add(rule)
+                else:
+                    rule.category = new_transaction.category
+
+                category_rule_saved = True
+
+        # Сохраняем транзакцию и правило одним commit.
         session.commit()
         session.refresh(new_transaction)
 
-        return transaction_to_dict(new_transaction)
+        result = transaction_to_dict(new_transaction)
+        result["category_rule_saved"] = category_rule_saved
+
+        return result
 
 
 @app.get("/transactions")
@@ -221,8 +293,23 @@ async def preview_sber_pdf(file: UploadFile = File(...)):
         with TemporaryDirectory() as temp_dir:
             pdf_path = Path(temp_dir) / "uploaded.pdf"
             pdf_path.write_bytes(content)
-
             transaction = parse_sber_pdf(pdf_path)
+
+        merchant_key = extract_merchant_key(
+            transaction["description"]
+        )
+        category_source = "heuristic"
+
+        # MCC приоритетнее пользовательского правила.
+        if transaction.get("mcc") is not None:
+            category_source = "mcc"
+        elif merchant_key is not None:
+            with SessionLocal() as session:
+                rule = find_category_rule(session, merchant_key)
+
+                if rule is not None:
+                    transaction["category"] = rule.category
+                    category_source = "learned_rule"
 
         return {
             "saved": False,
@@ -230,6 +317,8 @@ async def preview_sber_pdf(file: UploadFile = File(...)):
                 "Операция распознана. "
                 "Проверь данные перед сохранением."
             ),
+            "merchant_key": merchant_key,
+            "category_source": category_source,
             "transaction": {
                 "date": transaction["date"].isoformat(),
                 "amount": transaction["amount"],

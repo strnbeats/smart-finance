@@ -20,6 +20,10 @@ class TransactionCreate(BaseModel):
         pattern=r"^\d{4}$",
         description="Четырёхзначный MCC-код",
     )
+    learn_category_rule: bool = Field(
+        default=False,
+        description="Запомнить категорию для магазина",
+    )
 
 
 class TransactionUpdate(BaseModel):
