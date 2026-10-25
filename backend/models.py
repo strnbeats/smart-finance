@@ -41,3 +41,9 @@ class Transaction(Base):
         nullable=False,
         default="",
     )
+
+    mcc: Mapped[str | None] = mapped_column(
+        String(4),
+        nullable=True,
+        default=None,
+    )

@@ -52,7 +52,9 @@ def transaction_to_dict(transaction: Transaction):
         "type": transaction.type.value,
         "category": transaction.category,
         "description": transaction.description,
+        "mcc": transaction.mcc,
     }
+
 
 
 @app.get("/")

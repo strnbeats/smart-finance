@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -28,4 +28,21 @@ class Base(DeclarativeBase):
 def init_db():
     from backend import models
 
+    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
     Base.metadata.create_all(bind=engine)
+
+    inspector = inspect(engine)
+    columns = {
+        column["name"]
+        for column in inspector.get_columns("transactions")
+    }
+
+    if "mcc" not in columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE transactions "
+                    "ADD COLUMN mcc VARCHAR(4)"
+                )
+            )

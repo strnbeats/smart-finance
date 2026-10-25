@@ -15,6 +15,11 @@ class TransactionCreate(BaseModel):
     type: TransactionType
     category: str = Field(min_length=1, max_length=50)
     description: str = Field(default="", max_length=500)
+    mcc: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}$",
+        description="Четырёхзначный MCC-код",
+    )
 
 
 class TransactionUpdate(BaseModel):
@@ -23,3 +28,8 @@ class TransactionUpdate(BaseModel):
     type: TransactionType
     category: str = Field(min_length=1, max_length=50)
     description: str = Field(default="", max_length=500)
+    mcc: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}$",
+        description="Четырёхзначный MCC-код",
+    )
