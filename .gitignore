@@ -22,3 +22,6 @@ data/*.sqlite3
 .DS_Store
 .vscode/
 .idea/
+
+# Local certificates
+certs/
