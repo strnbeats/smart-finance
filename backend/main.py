@@ -18,6 +18,8 @@ from backend.schemas import (
     TransactionUpdate,
 )
 
+from backend.expense_agent import analyze_expenses
+
 
 MAX_PDF_SIZE = 10 * 1024 * 1024
 
@@ -272,6 +274,46 @@ def analytics_summary(
             end_date=end_date,
         )
 
+
+@app.post("/ai/analyze-expenses")
+def ai_analyze_expenses(
+    start_date: date,
+    end_date: date,
+):
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Начальная дата не может быть позже конечной",
+        )
+
+    with SessionLocal() as session:
+        summary = get_financial_summary(
+            session=session,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    try:
+        analysis = analyze_expenses(summary)
+    except Exception as error:
+        # Не раскрываем клиенту технические детали и настройки API.
+        print(
+            "Ошибка AI-анализа:",
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="AI-анализ временно недоступен. Попробуй позже.",
+        ) from error
+
+    return {
+        "period": {
+            "start_date": summary["start_date"],
+            "end_date": summary["end_date"],
+        },
+        "summary": summary,
+        "analysis": analysis,
+    }
 
 @app.post("/imports/sber/pdf")
 async def preview_sber_pdf(file: UploadFile = File(...)):
