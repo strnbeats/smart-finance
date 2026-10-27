@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
 import {
   getTransactions,
   getFinancialSummary,
+  analyzeExpenses,
   type Transaction,
   type FinancialSummary,
 } from './api'
+
 import ImportPage from './ImportPage'
 import './App.css'
 
@@ -12,7 +17,7 @@ const formatMoney = (amountInKopecks: number) =>
   new Intl.NumberFormat('ru-RU', {
     style: 'currency',
     currency: 'RUB',
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(amountInKopecks / 100)
 
 const formatDate = (date: string) => {
@@ -64,6 +69,14 @@ function App() {
   const [error, setError] = useState('')
   const [summaryError, setSummaryError] = useState('')
 
+  const initialRange = getCurrentMonthRange()
+
+  const [aiStartDate, setAiStartDate] = useState(initialRange.start)
+  const [aiEndDate, setAiEndDate] = useState(initialRange.end)
+  const [aiAnalysis, setAiAnalysis] = useState('')
+  const [aiError, setAiError] = useState('')
+  const [isAiLoading, setIsAiLoading] = useState(false)
+
   useEffect(() => {
     let isActive = true
 
@@ -113,6 +126,35 @@ function App() {
       isActive = false
     }
   }, [])
+
+  async function handleAnalyzeExpenses() {
+    if (!aiStartDate || !aiEndDate) {
+      setAiError('Выбери начальную и конечную даты.')
+      return
+    }
+
+    if (aiStartDate > aiEndDate) {
+      setAiError('Начальная дата не может быть позже конечной.')
+      return
+    }
+
+    setIsAiLoading(true)
+    setAiError('')
+    setAiAnalysis('')
+
+    try {
+      const result = await analyzeExpenses(aiStartDate, aiEndDate)
+      setAiAnalysis(result.analysis)
+    } catch (err: unknown) {
+      setAiError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось выполнить AI-анализ.',
+      )
+    } finally {
+      setIsAiLoading(false)
+    }
+  }
 
   const transactionIncome = transactions
     .filter((transaction) => transaction.type === 'income')
@@ -296,6 +338,154 @@ function App() {
               </article>
             </section>
 
+            <section
+              className="panel"
+              style={{ marginBottom: 24 }}
+            >
+              <div className="panel-heading">
+                <div>
+                  <h3>AI-анализ расходов</h3>
+                  <p>
+                    Персональные наблюдения и рекомендации на основе
+                    финансовой сводки
+                  </p>
+                </div>
+                <span className="card-icon">✦</span>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  alignItems: 'end',
+                  marginBottom: 20,
+                }}
+              >
+                <label
+                  style={{
+                    display: 'grid',
+                    gap: 7,
+                    flex: '1 1 160px',
+                  }}
+                >
+                  <span>Начало периода</span>
+                  <input
+                    type="date"
+                    value={aiStartDate}
+                    onChange={(event) =>
+                      setAiStartDate(event.target.value)
+                    }
+                    max={aiEndDate || undefined}
+                    style={{
+                      padding: 12,
+                      borderRadius: 10,
+                      border: '1px solid #303b4e',
+                      background: '#111724',
+                      color: '#fff',
+                      minWidth: 0,
+                    }}
+                  />
+                </label>
+
+                <label
+                  style={{
+                    display: 'grid',
+                    gap: 7,
+                    flex: '1 1 160px',
+                  }}
+                >
+                  <span>Конец периода</span>
+                  <input
+                    type="date"
+                    value={aiEndDate}
+                    onChange={(event) =>
+                      setAiEndDate(event.target.value)
+                    }
+                    min={aiStartDate || undefined}
+                    style={{
+                      padding: 12,
+                      borderRadius: 10,
+                      border: '1px solid #303b4e',
+                      background: '#111724',
+                      color: '#fff',
+                      minWidth: 0,
+                    }}
+                  />
+                </label>
+
+                <button
+                  className="primary-button"
+                  onClick={handleAnalyzeExpenses}
+                  disabled={isAiLoading}
+                >
+                  {isAiLoading
+                    ? 'Анализируем...'
+                    : '✦ Проанализировать'}
+                </button>
+              </div>
+
+              {isAiLoading && (
+                <p role="status">
+                  AI-помощник анализирует финансовую сводку...
+                </p>
+              )}
+
+              {aiError && (
+                <div role="alert" className="error-message">
+                  <strong>Не удалось выполнить анализ</strong>
+                  <p>{aiError}</p>
+                  <button
+                    className="text-button"
+                    onClick={handleAnalyzeExpenses}
+                    disabled={isAiLoading}
+                  >
+                    Попробовать снова
+                  </button>
+                </div>
+              )}
+
+              {aiAnalysis && !isAiLoading && (
+                <div
+                  className="insight-box"
+                  style={{
+                    alignItems: 'flex-start',
+                    marginTop: 12,
+                  }}
+                >
+                  <span className="insight-icon">✦</span>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="insight-title">
+                      Результат анализа
+                    </div>
+
+                    <div className="ai-markdown">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                      >
+                        {aiAnalysis
+                          .replace(/\\\|/g, '|')
+                          .replace(/\u202f/g, ' ')}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!aiAnalysis && !aiError && !isAiLoading && (
+                <p
+                  style={{
+                    color: '#8590a4',
+                    fontSize: 13,
+                  }}
+                >
+                  Выбери период и запусти анализ. Рекомендации появятся
+                  здесь.
+                </p>
+              )}
+            </section>
+
             <section className="content-grid">
               <article className="panel transactions-panel">
                 <div className="panel-heading">
@@ -405,11 +595,18 @@ function App() {
                           gap: 5,
                         }}
                       >
-                        <span style={{ color: '#8590a4', fontSize: 11 }}>
+                        <span
+                          style={{ color: '#8590a4', fontSize: 11 }}
+                        >
                           Всего
                         </span>
 
-                        <strong style={{ fontSize: 16, textAlign: 'center' }}>
+                        <strong
+                          style={{
+                            fontSize: 16,
+                            textAlign: 'center',
+                          }}
+                        >
                           {formatMoney(categoryTotal)}
                         </strong>
                       </div>
@@ -467,19 +664,6 @@ function App() {
                     </div>
                   </>
                 )}
-
-                <div className="insight-box">
-                  <span className="insight-icon">✦</span>
-
-                  <div>
-                    <div className="insight-title">
-                      Финансовая подсказка
-                    </div>
-                    <p>
-                      Здесь появится анализ трат и рекомендации AI-помощника.
-                    </p>
-                  </div>
-                </div>
               </article>
             </section>
 

@@ -749,3 +749,313 @@ button {
     font-size: 11px;
   }
 }
+
+
+/* AI analysis report */
+
+.insight-box:has(.ai-markdown) {
+  display: block;
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid #293747;
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse at top left, #19312e 0%, transparent 45%),
+    #0d1420;
+}
+
+.insight-box:has(.ai-markdown) > .insight-icon {
+  display: none;
+}
+
+.insight-box:has(.ai-markdown) .insight-title {
+  margin-bottom: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #293747;
+  color: #f1f5f9;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.ai-markdown {
+  min-width: 0;
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.ai-markdown > :first-child {
+  margin-top: 0;
+}
+
+.ai-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.ai-markdown h1,
+.ai-markdown h2,
+.ai-markdown h3 {
+  color: #f1f5f9;
+  line-height: 1.4;
+  font-weight: 650;
+}
+
+.ai-markdown h1 {
+  margin: 28px 0 14px;
+  font-size: 23px;
+  letter-spacing: -0.6px;
+}
+
+.ai-markdown h2 {
+  margin: 28px 0 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #293747;
+  font-size: 18px;
+  letter-spacing: -0.3px;
+}
+
+.ai-markdown h3 {
+  margin: 22px 0 9px;
+  color: #8ee8c5;
+  font-size: 15px;
+}
+
+.ai-markdown p {
+  margin: 12px 0;
+  color: #b9c4d5;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.ai-markdown strong {
+  color: #f1f5f9;
+  font-weight: 650;
+}
+
+.ai-markdown em {
+  color: #dbe5f1;
+}
+
+.ai-markdown ul,
+.ai-markdown ol {
+  margin: 14px 0;
+  padding-left: 25px;
+}
+
+.ai-markdown li {
+  margin: 9px 0;
+  padding-left: 4px;
+  color: #cbd5e1;
+  line-height: 1.7;
+}
+
+.ai-markdown li::marker {
+  color: #70e5b7;
+}
+
+.ai-markdown li > p {
+  margin: 4px 0;
+}
+
+.ai-markdown hr {
+  height: 1px;
+  margin: 24px 0;
+  border: 0;
+  background: #293747;
+}
+
+.ai-markdown blockquote {
+  margin: 18px 0;
+  padding: 12px 16px;
+  border-left: 3px solid #70e5b7;
+  border-radius: 0 8px 8px 0;
+  background: #142321;
+  color: #b9c4d5;
+}
+
+.ai-markdown blockquote p {
+  margin: 0;
+}
+
+.ai-markdown code {
+  padding: 2px 6px;
+  border: 1px solid #303b4e;
+  border-radius: 5px;
+  background: #171f2d;
+  color: #8ee8c5;
+  font-size: 0.92em;
+}
+
+.ai-markdown pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 14px;
+  border: 1px solid #293747;
+  border-radius: 9px;
+  background: #0a101a;
+}
+
+.ai-markdown pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #cbd5e1;
+}
+
+.ai-markdown a {
+  color: #8ee8c5;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Expense categories table */
+
+
+.ai-markdown table {
+  display: table;
+  width: auto;
+  max-width: 100%;
+  margin: 18px 0 24px;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #303b4e;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ai-markdown thead {
+  background: #1a2935;
+}
+
+.ai-markdown th,
+.ai-markdown td {
+  padding: 12px 16px;
+  border-right: 1px solid #293747;
+  border-bottom: 1px solid #293747;
+  text-align: left;
+  white-space: normal;
+}
+
+.ai-markdown th {
+  color: #e8eef7;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ai-markdown td {
+  background: #111a27;
+  color: #cbd5e1;
+}
+
+.ai-markdown tbody tr:nth-child(even) td {
+  background: #151f2d;
+}
+
+.ai-markdown tbody tr:hover td {
+  background: #1b2b37;
+}
+
+.ai-markdown th:last-child,
+.ai-markdown td:last-child {
+  border-right: 0;
+}
+
+.ai-markdown tbody tr:last-child td {
+  border-bottom: 0;
+  color: #f1f5f9;
+  font-weight: 650;
+}
+
+
+.ai-markdown thead {
+  background: #1a2935;
+}
+
+.ai-markdown th,
+.ai-markdown td {
+  padding: 12px 16px;
+  border-right: 1px solid #293747;
+  border-bottom: 1px solid #293747;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ai-markdown th {
+  color: #e8eef7;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ai-markdown td {
+  background: #111a27;
+  color: #cbd5e1;
+}
+
+.ai-markdown tbody tr:nth-child(even) td {
+  background: #151f2d;
+}
+
+.ai-markdown tbody tr:hover td {
+  background: #1b2b37;
+}
+
+.ai-markdown th:last-child,
+.ai-markdown td:last-child {
+  border-right: 0;
+}
+
+.ai-markdown tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.ai-markdown tbody tr:last-child td {
+  color: #f1f5f9;
+  font-weight: 650;
+}
+
+/* Small screens */
+
+@media (max-width: 700px) {
+  .insight-box:has(.ai-markdown) {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 11px;
+  }
+
+  .insight-box:has(.ai-markdown) .insight-title {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    font-size: 17px;
+  }
+
+  .ai-markdown {
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .ai-markdown h1 {
+    font-size: 20px;
+  }
+
+  .ai-markdown h2 {
+    margin-top: 23px;
+    font-size: 17px;
+  }
+
+  .ai-markdown h3 {
+    font-size: 14px;
+  }
+
+  .ai-markdown p {
+    font-size: 13px;
+  }
+
+  .ai-markdown th,
+  .ai-markdown td {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+}
