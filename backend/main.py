@@ -18,7 +18,7 @@ from backend.schemas import (
     TransactionUpdate,
 )
 
-from backend.expense_agent import analyze_expenses
+from backend.expense_graph import run_expense_graph
 
 
 MAX_PDF_SIZE = 10 * 1024 * 1024
@@ -294,7 +294,15 @@ def ai_analyze_expenses(
         )
 
     try:
-        analysis = analyze_expenses(summary)
+        graph_result = run_expense_graph(summary)
+
+        if graph_result["validation_errors"]:
+            print(
+                "Предупреждения проверки AI-анализа:",
+                "; ".join(graph_result["validation_errors"]),
+            )
+
+        analysis = graph_result["analysis"]
     except Exception as error:
         # Не раскрываем клиенту технические детали и настройки API.
         print(

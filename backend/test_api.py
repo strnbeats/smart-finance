@@ -363,15 +363,18 @@ def test_mcc_has_priority_over_learned_category_rule(
 def test_ai_expense_analysis_success(client, monkeypatch):
     create_test_transaction(client)
 
-    def fake_analyze_expenses(summary):
+    def fake_run_expense_graph(summary):
         assert summary["total_expenses"] == 135000
         assert summary["transactions_count"] == 1
-        return "Тестовый анализ расходов"
+        return {
+            "analysis": "Тестовый анализ расходов",
+            "validation_errors": [],
+        }
 
     monkeypatch.setattr(
         main,
-        "analyze_expenses",
-        fake_analyze_expenses,
+        "run_expense_graph",
+        fake_run_expense_graph,
     )
 
     response = client.post(
@@ -412,13 +415,13 @@ def test_ai_expense_analysis_handles_gigachat_error(
     client,
     monkeypatch,
 ):
-    def failing_analysis(summary):
+    def failing_graph(summary):
         raise RuntimeError("SECRET_API_KEY")
 
     monkeypatch.setattr(
         main,
-        "analyze_expenses",
-        failing_analysis,
+        "run_expense_graph",
+        failing_graph,
     )
 
     response = client.post(
