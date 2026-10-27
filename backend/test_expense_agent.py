@@ -26,6 +26,11 @@ def make_summary(
     }
 
 
+def extract_prompt_data(prompt):
+    data = prompt.split("Финансовые данные:\n", 1)[1]
+    return json.loads(data)
+
+
 def test_prompt_contains_financial_summary():
     prompt = expense_agent.build_expense_analysis_prompt(
         make_summary()
@@ -33,15 +38,15 @@ def test_prompt_contains_financial_summary():
 
     assert "2026-10-01" in prompt
     assert "2026-10-07" in prompt
-    assert "kopeks" in prompt
+    assert "amount_rub" in prompt
 
-    data = prompt.split("Финансовые данные:\n", 1)[1]
-    parsed = json.loads(data)
+    data = extract_prompt_data(prompt)
 
-    assert parsed["total_expenses_kopeks"] == 15000
-    assert parsed["total_income_kopeks"] == 50000
-    assert parsed["balance_kopeks"] == 35000
-    assert parsed["transactions_count"] == 3
+    assert data["currency"] == "RUB"
+    assert data["total_expenses_rub"] == 150.0
+    assert data["total_income_rub"] == 500.0
+    assert data["balance_rub"] == 350.0
+    assert data["transactions_count"] == 3
 
 
 def test_prompt_sorts_categories_by_amount():
@@ -49,18 +54,15 @@ def test_prompt_sorts_categories_by_amount():
         make_summary()
     )
 
-    data = json.loads(
-        prompt.split("Финансовые данные:\n", 1)[1]
-    )
-
+    data = extract_prompt_data(prompt)
     categories = data["expenses_by_category"]
 
     assert categories[0]["category"] == "Еда"
-    assert categories[0]["amount_kopeks"] == 10000
+    assert categories[0]["amount_rub"] == 100.0
     assert categories[0]["share_percent"] == 66.67
 
     assert categories[1]["category"] == "Транспорт"
-    assert categories[1]["amount_kopeks"] == 5000
+    assert categories[1]["amount_rub"] == 50.0
     assert categories[1]["share_percent"] == 33.33
 
 
@@ -105,7 +107,9 @@ def test_analysis_uses_gigachat_for_expenses(monkeypatch):
 
     assert result == "Тестовый анализ расходов"
     assert "prompt" in calls
-    assert "15000" in calls["prompt"]
+
+    data = extract_prompt_data(calls["prompt"])
+    assert data["total_expenses_rub"] == 150.0
 
 
 def test_prompt_handles_empty_categories():
@@ -115,8 +119,6 @@ def test_prompt_handles_empty_categories():
         )
     )
 
-    data = json.loads(
-        prompt.split("Финансовые данные:\n", 1)[1]
-    )
+    data = extract_prompt_data(prompt)
 
     assert data["expenses_by_category"] == []

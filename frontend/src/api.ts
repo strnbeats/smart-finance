@@ -104,3 +104,30 @@ export function createTransaction(
     body: JSON.stringify(transaction),
   })
 }
+
+
+export interface AIExpenseAnalysisResponse {
+  period: {
+    start_date: string
+    end_date: string
+  }
+  summary: FinancialSummary
+  analysis: string
+}
+
+export function analyzeExpenses(
+  startDate: string,
+  endDate: string,
+): Promise<AIExpenseAnalysisResponse> {
+  const params = new URLSearchParams({
+    start_date: startDate,
+    end_date: endDate,
+  })
+
+  return request<AIExpenseAnalysisResponse>(
+    `/ai/analyze-expenses?${params}`,
+    {
+      method: 'POST',
+    },
+  )
+}
