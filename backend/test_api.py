@@ -358,3 +358,98 @@ def test_mcc_has_priority_over_learned_category_rule(
     assert data["category_source"] == "mcc"
     assert data["transaction"]["mcc"] == "5812"
     assert data["transaction"]["category"] == "Рестораны"
+
+
+def test_ai_expense_analysis_success(client, monkeypatch):
+    create_test_transaction(client)
+
+    def fake_analyze_expenses(summary):
+        assert summary["total_expenses"] == 135000
+        assert summary["transactions_count"] == 1
+        return "Тестовый анализ расходов"
+
+    monkeypatch.setattr(
+        main,
+        "analyze_expenses",
+        fake_analyze_expenses,
+    )
+
+    response = client.post(
+        "/ai/analyze-expenses",
+        params={
+            "start_date": "2026-10-24",
+            "end_date": "2026-10-24",
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["period"]["start_date"] == "2026-10-24"
+    assert data["period"]["end_date"] == "2026-10-24"
+    assert data["summary"]["total_expenses"] == 135000
+    assert data["analysis"] == "Тестовый анализ расходов"
+
+
+def test_ai_expense_analysis_rejects_invalid_date_range(client):
+    response = client.post(
+        "/ai/analyze-expenses",
+        params={
+            "start_date": "2026-10-25",
+            "end_date": "2026-10-24",
+        },
+    )
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "Начальная дата не может быть позже конечной"
+    )
+
+
+def test_ai_expense_analysis_handles_gigachat_error(
+    client,
+    monkeypatch,
+):
+    def failing_analysis(summary):
+        raise RuntimeError("SECRET_API_KEY")
+
+    monkeypatch.setattr(
+        main,
+        "analyze_expenses",
+        failing_analysis,
+    )
+
+    response = client.post(
+        "/ai/analyze-expenses",
+        params={
+            "start_date": "2026-10-01",
+            "end_date": "2026-10-07",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "AI-анализ временно недоступен. Попробуй позже."
+    )
+    assert "SECRET_API_KEY" not in response.text
+
+
+def test_ai_expense_analysis_empty_period(client):
+    response = client.post(
+        "/ai/analyze-expenses",
+        params={
+            "start_date": "2020-01-01",
+            "end_date": "2020-01-02",
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["summary"]["transactions_count"] == 0
+    assert data["summary"]["total_expenses"] == 0
+    assert isinstance(data["analysis"], str)
+    assert data["analysis"]
