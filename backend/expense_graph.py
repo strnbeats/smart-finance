@@ -3,25 +3,35 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from backend.expense_agent import analyze_expenses
+from backend.expense_reviewer import review_expense_analysis
 
 
 class ExpenseAnalysisState(TypedDict):
     summary: dict
     analysis: str
+    review: str
     validation_errors: list[str]
 
 
 def analyze_node(state: ExpenseAnalysisState) -> dict:
-    """Передаёт финансовую сводку существующему AI-аналитику."""
+    """Формирует первоначальный отчёт AI-аналитика."""
     analysis = analyze_expenses(state["summary"])
 
-    return {
-        "analysis": analysis,
-    }
+    return {"analysis": analysis}
+
+
+def review_node(state: ExpenseAnalysisState) -> dict:
+    """Проверяет отчёт независимым AI-ревьюером."""
+    review = review_expense_analysis(
+        state["summary"],
+        state["analysis"],
+    )
+
+    return {"review": review}
 
 
 def validate_node(state: ExpenseAnalysisState) -> dict:
-    """Проверяет арифметическую согласованность данных и ответ AI."""
+    """Проверяет арифметику и наличие ответов агентов."""
     summary = state["summary"]
     errors = []
 
@@ -29,13 +39,10 @@ def validate_node(state: ExpenseAnalysisState) -> dict:
     expenses = summary.get("total_expenses")
     balance = summary.get("balance")
 
-    if (
-        isinstance(income, (int, float))
-        and not isinstance(income, bool)
-        and isinstance(expenses, (int, float))
-        and not isinstance(expenses, bool)
-        and isinstance(balance, (int, float))
-        and not isinstance(balance, bool)
+    numeric_values = (income, expenses, balance)
+    if all(
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        for value in numeric_values
     ):
         if income - expenses != balance:
             errors.append(
@@ -49,20 +56,23 @@ def validate_node(state: ExpenseAnalysisState) -> dict:
     if not isinstance(state.get("analysis"), str) or not state["analysis"].strip():
         errors.append("AI-аналитик вернул пустой отчёт.")
 
-    return {
-        "validation_errors": errors,
-    }
+    if not isinstance(state.get("review"), str) or not state["review"].strip():
+        errors.append("AI-ревьюер вернул пустой результат проверки.")
+
+    return {"validation_errors": errors}
 
 
 def build_expense_graph():
-    """Создаёт и компилирует граф анализа расходов."""
+    """Создаёт граф анализа, ревью и детерминированной проверки."""
     graph = StateGraph(ExpenseAnalysisState)
 
     graph.add_node("analyze", analyze_node)
+    graph.add_node("review", review_node)
     graph.add_node("validate", validate_node)
 
     graph.add_edge(START, "analyze")
-    graph.add_edge("analyze", "validate")
+    graph.add_edge("analyze", "review")
+    graph.add_edge("review", "validate")
     graph.add_edge("validate", END)
 
     return graph.compile()
@@ -72,11 +82,12 @@ expense_graph = build_expense_graph()
 
 
 def run_expense_graph(summary: dict) -> dict:
-    """Запускает граф и возвращает его итоговое состояние."""
+    """Запускает граф и возвращает итоговое состояние."""
     return expense_graph.invoke(
         {
             "summary": summary,
             "analysis": "",
+            "review": "",
             "validation_errors": [],
         }
     )

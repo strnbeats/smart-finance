@@ -303,6 +303,11 @@ def ai_analyze_expenses(
             )
 
         analysis = graph_result["analysis"]
+        review = graph_result["review"]
+
+        if review.strip():
+            analysis += "\n\n---\n\n### Проверка отчёта AI-ревьюером\n\n"
+            analysis += review
     except Exception as error:
         # Не раскрываем клиенту технические детали и настройки API.
         print(

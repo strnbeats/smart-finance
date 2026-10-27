@@ -368,6 +368,7 @@ def test_ai_expense_analysis_success(client, monkeypatch):
         assert summary["transactions_count"] == 1
         return {
             "analysis": "Тестовый анализ расходов",
+            "review": "Существенных проблем не найдено.",
             "validation_errors": [],
         }
 
@@ -392,7 +393,9 @@ def test_ai_expense_analysis_success(client, monkeypatch):
     assert data["period"]["start_date"] == "2026-10-24"
     assert data["period"]["end_date"] == "2026-10-24"
     assert data["summary"]["total_expenses"] == 135000
-    assert data["analysis"] == "Тестовый анализ расходов"
+    assert "Тестовый анализ расходов" in data["analysis"]
+    assert "Проверка отчёта AI-ревьюером" in data["analysis"]
+    assert "Существенных проблем не найдено." in data["analysis"]
 
 
 def test_ai_expense_analysis_rejects_invalid_date_range(client):
