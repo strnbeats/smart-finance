@@ -4,7 +4,7 @@ from backend.llm_client import GigaChatClient
 
 
 def build_expense_review_prompt(summary: dict, analysis: str) -> str:
-    """Создаёт запрос для проверки финансового отчёта."""
+    """Создаёт запрос для структурированной проверки отчёта."""
 
     data = {
         "period": {
@@ -16,75 +16,86 @@ def build_expense_review_prompt(summary: dict, analysis: str) -> str:
         "total_expenses_rub": round(summary["total_expenses"] / 100, 2),
         "balance_rub": round(summary["balance"] / 100, 2),
         "transactions_count": summary["transactions_count"],
-        "expenses_by_category": [
-            {
-                "category": category,
-                "amount_rub": round(amount / 100, 2),
-                "share_percent": (
-                    round(amount / summary["total_expenses"] * 100, 2)
-                    if summary["total_expenses"] > 0
-                    else 0
-                ),
-            }
+        "expenses_by_category": {
+            category: round(amount / 100, 2)
             for category, amount in summary["expenses_by_category"].items()
-        ],
+        },
     }
 
     return f"""
-Ты — независимый AI-ревьюер финансовых отчётов приложения Smart Finance.
+Ты — независимый AI-ревьюер финансовых отчётов Smart Finance.
 
-Твоя задача — проверить отчёт другого AI-аналитика по исходным данным.
-
-## Исходные финансовые данные
-
+## Исходные данные
 {json.dumps(data, ensure_ascii=False, indent=2)}
 
 ## Отчёт аналитика
-
 {analysis}
 
-## Правила проверки
+## Проверь
+- соответствуют ли суммы и категории исходным данным;
+- нет ли выдуманных фактов о пользователе;
+- не выдаются ли предположения за факты;
+- нет ли выводов о динамике по одному периоду;
+- не объявляются ли расходы проблемными без контекста.
 
-1. Сверяй утверждения отчёта только с исходными данными.
-2. Ищи неверные суммы, проценты, названия категорий и другие
-   противоречия с переданной сводкой.
-3. Отмечай выдуманные покупки, привычки, подписки, долги,
-   финансовые цели и обстоятельства пользователя.
-4. Проверяй, не называет ли аналитик расходы проблемными
-   без информации о бюджете и потребностях.
-5. Проверяй, не делает ли аналитик выводы о динамике расходов,
-   хотя передан только один период.
-6. Не считай предположение фактом.
-7. Не придумывай замечания ради заполнения ответа.
-8. Не переписывай отчёт и не добавляй новые финансовые советы.
-9. Если отчёт корректен по доступным данным, явно сообщи об этом.
-10. Если данных недостаточно для проверки утверждения, укажи это.
+Не придумывай замечания ради заполнения ответа.
+Если существенных проблем нет, используй статус approved.
+Если есть конкретные исправимые проблемы, используй revise.
+Если данных недостаточно для полноценной проверки, используй insufficient_data.
 
-## Формат ответа
+Верни только валидный JSON без Markdown и пояснений вокруг него:
+{{
+  "status": "approved",
+  "feedback": "Краткий результат проверки"
+}}
 
-### Итог проверки
-Один из вариантов: «Существенных проблем не найдено»,
-«Есть замечания» или «Недостаточно данных для полной проверки».
+Поле status должно содержать ровно одно значение:
+approved, revise или insufficient_data.
 
-### Замечания
-Перечисли конкретные проблемы и объясни, с какими исходными
-данными они не согласуются. Если проблем нет, так и напиши.
-
-### Что осталось непроверенным
-Укажи только существенные ограничения проверки.
-
-Не утверждай, что проверил то, чего нельзя проверить по сводке.
-Отвечай по-русски, кратко и конкретно.
+Поле feedback должно объяснять результат по-русски.
 """.strip()
 
 
-def review_expense_analysis(summary: dict, analysis: str) -> str:
-    """Передаёт отчёт и финансовую сводку независимому ревьюеру."""
+def review_expense_analysis(summary: dict, analysis: str) -> dict:
+    """Проверяет отчёт и возвращает статус с замечаниями."""
 
-    if not analysis.strip():
-        return "Проверка не выполнена: отчёт аналитика пуст."
+    if not isinstance(analysis, str) or not analysis.strip():
+        return {
+            "status": "insufficient_data",
+            "feedback": "Проверка невозможна: отчёт аналитика пуст.",
+        }
 
     client = GigaChatClient()
     prompt = build_expense_review_prompt(summary, analysis)
+    response = client.ask(prompt)
 
-    return client.ask(prompt)
+    try:
+        result = json.loads(response)
+    except (json.JSONDecodeError, TypeError):
+        return {
+            "status": "insufficient_data",
+            "feedback": (
+                "Не удалось разобрать структурированный ответ ревьюера. "
+                "Автоматическое решение о доработке не принято."
+            ),
+        }
+
+    if not isinstance(result, dict):
+        return {
+            "status": "insufficient_data",
+            "feedback": "Ревьюер вернул ответ в неверном формате.",
+        }
+
+    status = result.get("status")
+    feedback = result.get("feedback")
+
+    if status not in {"approved", "revise", "insufficient_data"}:
+        status = "insufficient_data"
+
+    if not isinstance(feedback, str) or not feedback.strip():
+        feedback = "Ревьюер не предоставил пояснений."
+
+    return {
+        "status": status,
+        "feedback": feedback.strip(),
+    }

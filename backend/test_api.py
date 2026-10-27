@@ -157,9 +157,7 @@ def test_delete_transaction(client):
 
     assert response.status_code == 200
 
-    get_response = client.get(
-        f"/transactions/{created['id']}"
-    )
+    get_response = client.get(f"/transactions/{created['id']}")
 
     assert get_response.status_code == 404
 
@@ -366,9 +364,14 @@ def test_ai_expense_analysis_success(client, monkeypatch):
     def fake_run_expense_graph(summary):
         assert summary["total_expenses"] == 135000
         assert summary["transactions_count"] == 1
+
         return {
             "analysis": "Тестовый анализ расходов",
-            "review": "Существенных проблем не найдено.",
+            "review_result": {
+                "status": "approved",
+                "feedback": "Существенных проблем не найдено.",
+            },
+            "revision_count": 0,
             "validation_errors": [],
         }
 
@@ -395,6 +398,7 @@ def test_ai_expense_analysis_success(client, monkeypatch):
     assert data["summary"]["total_expenses"] == 135000
     assert "Тестовый анализ расходов" in data["analysis"]
     assert "Проверка отчёта AI-ревьюером" in data["analysis"]
+    assert "Отчёт одобрен" in data["analysis"]
     assert "Существенных проблем не найдено." in data["analysis"]
 
 

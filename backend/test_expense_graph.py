@@ -16,7 +16,13 @@ def make_summary():
     }
 
 
-def mock_agents(monkeypatch, review="Существенных проблем не найдено."):
+def mock_agents(monkeypatch, review_result=None):
+    if review_result is None:
+        review_result = {
+            "status": "approved",
+            "feedback": "Существенных проблем не найдено.",
+        }
+
     monkeypatch.setattr(
         expense_graph,
         "analyze_expenses",
@@ -25,11 +31,18 @@ def mock_agents(monkeypatch, review="Существенных проблем н�
     monkeypatch.setattr(
         expense_graph,
         "review_expense_analysis",
-        lambda summary, analysis: review,
+        lambda summary, analysis: review_result,
+    )
+    monkeypatch.setattr(
+        expense_graph,
+        "revise_expense_analysis",
+        lambda summary, analysis, feedback: (
+            "Исправленный отчёт без неподтверждённых выводов."
+        ),
     )
 
 
-def test_graph_runs_analysis_review_and_validation(monkeypatch):
+def test_graph_approves_analysis_without_revision(monkeypatch):
     mock_agents(monkeypatch)
 
     result = expense_graph.run_expense_graph(make_summary())
@@ -37,8 +50,101 @@ def test_graph_runs_analysis_review_and_validation(monkeypatch):
     assert result["analysis"] == (
         "Расходы на еду — основная категория."
     )
-    assert result["review"] == "Существенных проблем не найдено."
+    assert result["review_result"]["status"] == "approved"
+    assert result["revision_count"] == 0
     assert result["validation_errors"] == []
+
+
+def test_graph_revises_analysis_and_reviews_it_again(monkeypatch):
+    review_results = iter(
+        [
+            {
+                "status": "revise",
+                "feedback": "Убери неподтверждённые выводы.",
+            },
+            {
+                "status": "approved",
+                "feedback": "Существенных проблем не найдено.",
+            },
+        ]
+    )
+    review_calls = []
+    revision_calls = []
+
+    monkeypatch.setattr(
+        expense_graph,
+        "analyze_expenses",
+        lambda summary: "Первоначальный отчёт.",
+    )
+
+    def mock_review(summary, analysis):
+        review_calls.append(analysis)
+        return next(review_results)
+
+    def mock_revision(summary, analysis, feedback):
+        revision_calls.append((analysis, feedback))
+        return "Исправленный отчёт."
+
+    monkeypatch.setattr(
+        expense_graph,
+        "review_expense_analysis",
+        mock_review,
+    )
+    monkeypatch.setattr(
+        expense_graph,
+        "revise_expense_analysis",
+        mock_revision,
+    )
+
+    result = expense_graph.run_expense_graph(make_summary())
+
+    assert result["analysis"] == "Исправленный отчёт."
+    assert result["review_result"]["status"] == "approved"
+    assert result["revision_count"] == 1
+    assert len(review_calls) == 2
+    assert len(revision_calls) == 1
+    assert revision_calls[0][1] == "Убери неподтверждённые выводы."
+    assert result["validation_errors"] == []
+
+
+def test_graph_does_not_revise_more_than_once(monkeypatch):
+    review_calls = []
+    revision_calls = []
+
+    monkeypatch.setattr(
+        expense_graph,
+        "analyze_expenses",
+        lambda summary: "Первоначальный отчёт.",
+    )
+
+    def mock_review(summary, analysis):
+        review_calls.append(analysis)
+        return {
+            "status": "revise",
+            "feedback": "Есть замечания.",
+        }
+
+    def mock_revision(summary, analysis, feedback):
+        revision_calls.append(analysis)
+        return "Исправленный отчёт."
+
+    monkeypatch.setattr(
+        expense_graph,
+        "review_expense_analysis",
+        mock_review,
+    )
+    monkeypatch.setattr(
+        expense_graph,
+        "revise_expense_analysis",
+        mock_revision,
+    )
+
+    result = expense_graph.run_expense_graph(make_summary())
+
+    assert result["revision_count"] == 1
+    assert len(review_calls) == 2
+    assert len(revision_calls) == 1
+    assert result["review_result"]["status"] == "revise"
 
 
 def test_graph_detects_incorrect_balance(monkeypatch):
@@ -72,12 +178,18 @@ def test_graph_detects_empty_analysis(monkeypatch):
     )
 
 
-def test_graph_detects_empty_review(monkeypatch):
-    mock_agents(monkeypatch, review="   ")
+def test_graph_detects_invalid_review_result(monkeypatch):
+    mock_agents(
+        monkeypatch,
+        review_result={
+            "status": "unknown",
+            "feedback": "",
+        },
+    )
 
     result = expense_graph.run_expense_graph(make_summary())
 
     assert any(
-        "пустой результат проверки" in error
+        "некорректный результат" in error
         for error in result["validation_errors"]
     )

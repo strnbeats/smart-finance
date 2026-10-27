@@ -17,7 +17,6 @@ from backend.schemas import (
     TransactionType,
     TransactionUpdate,
 )
-
 from backend.expense_graph import run_expense_graph
 
 
@@ -303,11 +302,38 @@ def ai_analyze_expenses(
             )
 
         analysis = graph_result["analysis"]
-        review = graph_result["review"]
+        review_result = graph_result["review_result"]
 
-        if review.strip():
-            analysis += "\n\n---\n\n### Проверка отчёта AI-ревьюером\n\n"
-            analysis += review
+        if isinstance(review_result, dict):
+            status = review_result.get(
+                "status",
+                "insufficient_data",
+            )
+            feedback = review_result.get(
+                "feedback",
+                "Результат проверки отсутствует.",
+            )
+
+            status_labels = {
+                "approved": "Отчёт одобрен",
+                "revise": "Остались замечания",
+                "insufficient_data": (
+                    "Недостаточно данных для проверки"
+                ),
+            }
+
+            status_label = status_labels.get(
+                status,
+                "Статус проверки неизвестен",
+            )
+
+            analysis += (
+                "\n\n---\n\n"
+                "### Проверка отчёта AI-ревьюером\n\n"
+            )
+            analysis += f"**Статус:** {status_label}\n\n"
+            analysis += feedback
+
     except Exception as error:
         # Не раскрываем клиенту технические детали и настройки API.
         print(
@@ -328,9 +354,13 @@ def ai_analyze_expenses(
         "analysis": analysis,
     }
 
+
 @app.post("/imports/sber/pdf")
 async def preview_sber_pdf(file: UploadFile = File(...)):
-    if not file.filename or Path(file.filename).suffix.lower() != ".pdf":
+    if (
+        not file.filename
+        or Path(file.filename).suffix.lower() != ".pdf"
+    ):
         raise HTTPException(
             status_code=400,
             detail="Загрузи файл с расширением .pdf",
