@@ -145,3 +145,113 @@ def test_analytics_empty_period(client):
     assert data["balance"] == 0
     assert data["transactions_count"] == 0
     assert data["expenses_by_category"] == {}
+
+
+def test_recommendation_context(client):
+    from datetime import date
+
+    from backend.analytics import get_recommendation_context
+
+    transactions = [
+        {
+            "date": "2026-10-05",
+            "amount": 50000,
+            "type": "expense",
+            "category": "Еда",
+            "description": "Супермаркет",
+        },
+        {
+            "date": "2026-10-07",
+            "amount": 30000,
+            "type": "expense",
+            "category": "Еда",
+            "description": "Супермаркет",
+        },
+        {
+            "date": "2026-10-08",
+            "amount": 20000,
+            "type": "expense",
+            "category": "Транспорт",
+            "description": "Такси",
+        },
+        {
+            "date": "2026-10-09",
+            "amount": 10000,
+            "type": "expense",
+            "category": "Развлечения",
+            "description": "Кино",
+        },
+        {
+            "date": "2026-10-10",
+            "amount": 90000,
+            "type": "income",
+            "category": "Зарплата",
+            "description": "Зарплата",
+        },
+    ]
+
+    for transaction in transactions:
+        response = client.post("/transactions", json=transaction)
+        assert response.status_code in (200, 201)
+
+    with main.SessionLocal() as session:
+        context = get_recommendation_context(
+            session,
+            date(2026, 10, 1),
+            date(2026, 10, 31),
+        )
+
+    assert context["total_expenses"] == 110000
+    assert context["expense_transactions_count"] == 4
+
+    assert context["categories"] == [
+        {
+            "category": "Еда",
+            "amount": 80000,
+            "transaction_count": 2,
+            "share_percent": 72.7,
+        },
+        {
+            "category": "Транспорт",
+            "amount": 20000,
+            "transaction_count": 1,
+            "share_percent": 18.2,
+        },
+        {
+            "category": "Развлечения",
+            "amount": 10000,
+            "transaction_count": 1,
+            "share_percent": 9.1,
+        },
+    ]
+
+    assert context["largest_expenses"][0]["amount"] == 50000
+    assert context["largest_expenses"][0]["description"] == "Супермаркет"
+
+    assert context["repeated_operations"] == [
+        {
+            "description": "Супермаркет",
+            "total_amount": 80000,
+            "transaction_count": 2,
+            "categories": ["Еда"],
+        }
+    ]
+
+
+def test_recommendation_context_empty_period(client):
+    from datetime import date
+
+    from backend.analytics import get_recommendation_context
+
+    with main.SessionLocal() as session:
+        context = get_recommendation_context(
+            session,
+            date(2026, 10, 1),
+            date(2026, 10, 31),
+        )
+
+    assert context["total_expenses"] == 0
+    assert context["expense_transactions_count"] == 0
+    assert context["categories"] == []
+    assert context["largest_expenses"] == []
+    assert context["repeated_operations"] == []
